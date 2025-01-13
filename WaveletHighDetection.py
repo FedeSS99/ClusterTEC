@@ -211,16 +211,6 @@ class WaveletRidgeVis:
         power = np.abs(cwt_coeffs)**2.0
         periods = 1.0/(60.0*freqs)
         return cwt_coeffs, power, periods
-    
-
-#    def __reconstruct_series(self, cwt_coeffs:np.ndarray, selected_scales_index:np.ndarray, scales:np.ndarray, dt):
-#        reconstruct_signal = (scales[selected_scales_index]**0.5).reshape(1, selected_scales_index.size) @ (cwt_coeffs[selected_scales_index, :].real)
-#
-#        reconstruct_signal *= self.dj * (dt**0.5) / self.__psi_0
-#        reconstruct_signal = reconstruct_signal.flatten()
-#
-#        return reconstruct_signal
-        
 
     def VisualizeCWTs(self) -> None:
         total_series = len(self.__time_sequences)
