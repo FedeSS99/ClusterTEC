@@ -11,7 +11,6 @@ from numpy import array, zeros, savetxt
 if __name__ == "__main__":
     wavelet = "cmor1.5-1.5"
     dj = 0.0625
-    dist_method = "DTW"
 
     try:
         with open("./data/PTEX_DTEC_series.dat", "r") as DTECin:
@@ -33,7 +32,7 @@ if __name__ == "__main__":
     total_series = len(dtec_series)
     print(f"Total of series: {total_series}")
 
-    print(f"\n--Computing {dist_method} between every pair of prominent series--")
+    print(f"\n--Computing DTW between every pair of prominent series--")
 
     def compute_dist(index_1, index_2, seq_1, seq_2):
         return index_1, index_2, dtw(seq_1, seq_2)
@@ -47,4 +46,4 @@ if __name__ == "__main__":
         dissimilarity_matrix[i, j] = dist
         dissimilarity_matrix[j, i] = dist
 
-    savetxt(f"./data/PTEX_{dist_method}_matrix.dat", dissimilarity_matrix, delimiter=",")
+    savetxt(f"./data/PTEX_DTW_matrix.dat", dissimilarity_matrix, delimiter=",")

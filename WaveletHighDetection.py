@@ -214,7 +214,6 @@ class WaveletRidgeVis:
 
     def VisualizeCWTs(self) -> None:
         total_series = len(self.__time_sequences)
-        SNR_series = total_series * [0.0]
 
         for index in range(total_series):
             time_seq, vtec_seq = self.__time_sequences[index], self.__vtec_sequences[index]
@@ -227,6 +226,7 @@ class WaveletRidgeVis:
                 scales = s0 * (2 ** (np.arange(J + 1) * self.dj))
 
                 cwt_coeffs, cwt_power, periods = self.__get_cwt(vtec_seq, scales, dt)
+                del cwt_coeffs
                 mstids_periods_index = np.argwhere(periods <= 60.0)[:, 0]
 
                 periods = periods[mstids_periods_index]
@@ -245,22 +245,23 @@ class WaveletRidgeVis:
                 LabelBiggestContour = GetProminentContours(cwt_power, LabelsArray, time_seq, periods)
                 BoxX, BoxY = LabelBiggestContour
 
-                signal_indexes = (BoxX[0] <= time_seq) & (time_seq <= BoxX[1])
-                not_signal_indexes = (time_seq < BoxX[0]) | (BoxX[1] < time_seq)
-
-                SNR = (vtec_seq[signal_indexes].std()/vtec_seq[not_signal_indexes].std())**2.0
-                SNR_series[index] = SNR
-
                 figure, subplots = plt.subplot_mosaic([["DTEC"],
                                                        ["CWT"]],
                                                        sharex = True,
                                                        figsize = (10, 10))
                 
-                figure.suptitle(f"{SNR=:.3f}")
+                figure.suptitle(f"PRN: {self.__PRN_per_seq[index]}")
                 subplots["DTEC"].plot(time_seq, vtec_seq, "-k", linewidth = 1.5)
 
-                CWT_image = subplots["CWT"].pcolormesh(time_seq, periods, cwt_power, cmap = "gnuplot2")
+                CWT_image = subplots["CWT"].pcolormesh(time_seq, periods, cwt_power, cmap = "jet")
                 subplots["CWT"].set_xlim(time_seq.min(), time_seq.max())
+
+                for xvalue in BoxX:
+                    subplots["DTEC"].axvline(x = xvalue, color = "r", linestyle = "--", linewidth = 2.0)
+                    subplots["CWT"].axvline(x = xvalue, color = "r", linestyle = "--", linewidth = 2.0)
+
+                subplots["CWT"].set_xlabel("Time [UTC]")
+                plt.colorbar(CWT_image, ax = subplots["CWT"], label = "Wavelet Power |W|²", orientation = "horizontal")
 
                 figure.tight_layout()
                 plt.show()
