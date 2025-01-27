@@ -261,6 +261,8 @@ class WaveletRidgeVis:
                     subplots["CWT"].axvline(x = xvalue, color = "r", linestyle = "--", linewidth = 2.0)
 
                 subplots["CWT"].set_xlabel("Time [UTC]")
+                subplots["CWT"].set_ylabel("Period (Minutes)")
+                subplots["DTEC"].set_ylabel("dTEC [TECU]")
                 plt.colorbar(CWT_image, ax = subplots["CWT"], label = "Wavelet Power |W|²", orientation = "horizontal")
 
                 figure.tight_layout()
