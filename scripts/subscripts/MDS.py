@@ -125,7 +125,6 @@ class ClustTimeMDS:
             del EigVals_B_Dissim, EigVecs_B_Dissim, B_Dissim
 
             MDS_TS = MDS(n_components = num_comps, n_jobs = -1, dissimilarity = "precomputed", n_init = 1)
-            print(self.__dissim)
             MDS_TS.fit(X = self.__dissim, init = init_conf)
             self.Xc = MDS_TS.embedding_
             distances_Xc = euclidean_distances(self.Xc)
