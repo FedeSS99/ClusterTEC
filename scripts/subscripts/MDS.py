@@ -31,16 +31,14 @@ class ClustTimeMDS:
 
         upper_triu_index = np.triu_indices(n = orig_dissim.shape[0], k = 1)
         x, y = orig_dissim[upper_triu_index], red_dissim[upper_triu_index]
-        m = np.dot(x, y)/np.dot(x, x)
+        max_x = x.max()
 
         Subplot.scatter(x, y, s = 4, c = "blue", marker = "o", alpha = 0.1)
-        Subplot.plot([0.0, x.max()], [0.0, m*x.max()], "--r", label  = f"{m=: 0.4f}")
-        Subplot.plot([0.0, x.max()], [0.0, x.max()], "-k")
+        Subplot.plot([0.0, max_x], [0.0, max_x], "-k")
         
-        Subplot.legend(loc = "upper left")
         Subplot.set_xlabel("Original dissimilarities")
         Subplot.set_ylabel("Reduced dissimilarities")
-        Subplot.set_xlim(left = 0.0)
+        Subplot.set_xlim(left = 0.0, right = max_x)
         Subplot.set_ylim(bottom = 0.0)
         
         Figure.tight_layout()
