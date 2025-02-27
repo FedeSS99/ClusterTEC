@@ -5,10 +5,10 @@ class ClusterVTECDataMDS:
         # Initialize with a dissimilarity matrix
         self.__dissimilarity_matrix = dissimilarity
 
-    def ComputeMDS(self, num_comps_mds = 2, method = "Classic") -> float:
+    def ComputeMDS(self, num_comps_mds = 2, method = "Classic", max_iter : int = 500, eps : float = 1e-6, verbose : int = 0) -> float:
         # Perform MDS (Multidimensional Scaling) on the dissimilarity matrix
         self.__MDS_TScluster = ClustTimeMDS(self.__dissimilarity_matrix)
-        self.Xc_TS = self.__MDS_TScluster.fit(num_comps_mds, method = method)
+        self.Xc_TS = self.__MDS_TScluster.fit(num_comps_mds, method = method, max_iter = max_iter, eps = eps, verbose = verbose)
 
         # Return the normalized stress value as a measure of MDS quality
         return self.__MDS_TScluster.normalized_stress
