@@ -1,7 +1,7 @@
 import numpy as np
 from scipy.stats import gaussian_kde
 from sklearn.metrics import euclidean_distances
-from matplotlib.pyplot import subplots, show
+from matplotlib.pyplot import subplots
 
 from sklearn.manifold import MDS
 
@@ -55,7 +55,7 @@ class ClustTimeMDS:
         # Compute Stress-1
         return np.sqrt(num / denom)
 
-    def fit(self, num_comps = 2, method = "Classic", max_iter : int = 500, eps : float = 1e-6, verbose:int  = 0):
+    def fit(self, num_comps = 2, method = "Classic", max_iter : int = 500, eps : float = 1e-6, verbose:int  = 0, visualize_shepard : bool = True):
         if method == "classic":
             self.__ComputeB()
             self.__GetEuclideanDistances()
@@ -64,13 +64,24 @@ class ClustTimeMDS:
 
             EigVals_B_euclid, EigVecs_B_euclid = np.linalg.eigh(B_euclid)
             self.Xc = np.fliplr(np.sqrt(EigVals_B_euclid[EigVals_B_euclid.size - num_comps:]) * EigVecs_B_euclid[:, EigVals_B_euclid.size - num_comps:])
-            del EigVals_B_euclid, EigVecs_B_euclid, B_euclid
 
             distances_Xc = euclidean_distances(self.Xc)
             self.normalized_stress = self.__compute_stress_1(self.__EuclidDist, distances_Xc)
 
-            self.__VisualizeShepardPlot(self.__EuclidDist, distances_Xc)
+            if visualize_shepard:
+                self.__VisualizeShepardPlot(self.__EuclidDist, distances_Xc)
+        
+        elif method == "dissim":
+            self.__ComputeB()
 
+            EigVals_B_dissim, EigVecs_B_dissim = np.linalg.eigh(self.__B)
+            self.Xc = np.fliplr(np.sqrt(EigVals_B_dissim[EigVals_B_dissim.size - num_comps:]) * EigVecs_B_dissim[:, EigVals_B_dissim.size - num_comps:])
+
+            distances_Xc = euclidean_distances(self.Xc)
+            self.normalized_stress = self.__compute_stress_1(self.__dissim, distances_Xc)
+
+            if visualize_shepard:
+                self.__VisualizeShepardPlot(self.__dissim, distances_Xc)
 
         elif method == "SMACOF-euclidean":
             self.__ComputeB()
@@ -82,7 +93,8 @@ class ClustTimeMDS:
             distances_Xc = euclidean_distances(self.Xc)
             self.normalized_stress = self.__compute_stress_1(self.__EuclidDist, distances_Xc)
 
-            self.__VisualizeShepardPlot(self.__EuclidDist, distances_Xc)
+            if visualize_shepard:
+                self.__VisualizeShepardPlot(self.__EuclidDist, distances_Xc)
 
 
         elif method == "SMACOF-dissim":
@@ -92,7 +104,8 @@ class ClustTimeMDS:
             distances_Xc = euclidean_distances(self.Xc)
             self.normalized_stress = self.__compute_stress_1(self.__dissim, distances_Xc)
 
-            self.__VisualizeShepardPlot(self.__dissim, distances_Xc)
+            if visualize_shepard:
+                self.__VisualizeShepardPlot(self.__dissim, distances_Xc)
 
     
         elif method == "SMACOF-euclidean-classic":
@@ -103,7 +116,6 @@ class ClustTimeMDS:
 
             EigVals_B_euclid, EigVecs_B_euclid = np.linalg.eigh(B_euclid)
             init_conf = np.fliplr(np.sqrt(EigVals_B_euclid[EigVals_B_euclid.size - num_comps:]) * EigVecs_B_euclid[:, EigVals_B_euclid.size - num_comps:])
-            del EigVals_B_euclid, EigVecs_B_euclid, B_euclid
 
             MDS_TS = MDS(n_components = num_comps, n_jobs = -1, dissimilarity = "precomputed", n_init = 1, max_iter = max_iter, eps = eps, verbose = verbose)
             MDS_TS.fit(X = self.__EuclidDist, init = init_conf)
@@ -111,7 +123,8 @@ class ClustTimeMDS:
             distances_Xc = euclidean_distances(self.Xc)
             self.normalized_stress = self.__compute_stress_1(self.__EuclidDist, distances_Xc)
 
-            self.__VisualizeShepardPlot(self.__EuclidDist, distances_Xc)
+            if visualize_shepard:
+                self.__VisualizeShepardPlot(self.__EuclidDist, distances_Xc)
 
 
         elif method == "SMACOF-dissim-classic":    
@@ -119,7 +132,6 @@ class ClustTimeMDS:
 
             EigVals_B_Dissim, EigVecs_B_Dissim = np.linalg.eigh(B_Dissim)
             init_conf = np.fliplr(np.sqrt(EigVals_B_Dissim[EigVals_B_Dissim.size - num_comps:]) * EigVecs_B_Dissim[:, EigVals_B_Dissim.size - num_comps:])
-            del EigVals_B_Dissim, EigVecs_B_Dissim, B_Dissim
 
             MDS_TS = MDS(n_components = num_comps, n_jobs = -1, dissimilarity = "precomputed", n_init = 1, max_iter = max_iter, eps = eps, verbose = verbose)
             MDS_TS.fit(X = self.__dissim, init = init_conf)
@@ -127,7 +139,8 @@ class ClustTimeMDS:
             distances_Xc = euclidean_distances(self.Xc)
             self.normalized_stress = self.__compute_stress_1(self.__dissim, distances_Xc)
     
-            self.__VisualizeShepardPlot(self.__dissim, distances_Xc)
+            if visualize_shepard:
+                self.__VisualizeShepardPlot(self.__dissim, distances_Xc)
     
 
         print(f"{method} with {num_comps} components has a stress-1 value of {self.normalized_stress :.6f}")
@@ -153,7 +166,7 @@ class ClustTimeMDS:
                     if Colors is not None:
                         Subplots[n,m].scatter(self.Xc[:,m], self.Xc[:,n], c = Colors, ec = "black", s = 12)
                     else:
-                        Subplots[n,m].scatter(self.Xc[:,m], self.Xc[:,n], marker = "o", fc = "blue", ec = "black", s = 12)
+                        Subplots[n,m].scatter(self.Xc[:,m], self.Xc[:,n], marker = "o", fc = "black", ec = "black", s = 12)
 
             Subplots[num_dims-1,n].set_xlabel(f"Coordinate {n + 1}")
         Figure.tight_layout()

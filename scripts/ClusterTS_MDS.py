@@ -5,17 +5,17 @@ class ClusterVTECDataMDS:
         # Initialize with a dissimilarity matrix
         self.__dissimilarity_matrix = dissimilarity
 
-    def ComputeMDS(self, num_comps_mds = 2, method = "Classic", max_iter : int = 500, eps : float = 1e-6, verbose : int = 0) -> float:
+    def ComputeMDS(self, num_comps_mds = 2, method = "Classic", max_iter : int = 500, eps : float = 1e-6, verbose : int = 0, visualize_shepard : bool = True) -> float:
         # Perform MDS (Multidimensional Scaling) on the dissimilarity matrix
         self.__MDS_TScluster = ClustTimeMDS(self.__dissimilarity_matrix)
-        self.Xc_TS = self.__MDS_TScluster.fit(num_comps_mds, method = method, max_iter = max_iter, eps = eps, verbose = verbose)
+        self.Xc_TS = self.__MDS_TScluster.fit(num_comps_mds, method = method, max_iter = max_iter, eps = eps, verbose = verbose, visualize_shepard = visualize_shepard)
 
         # Return the normalized stress value as a measure of MDS quality
         return self.__MDS_TScluster.normalized_stress
 
-    def ClusterTSVectors(self, num_clusters = 2, cluster_method = "K-Means", Labels = None) -> None:
+    def ClusterTSVectors(self, num_clusters = 2, cluster_method = "K-Means") -> None:
         # Cluster the time series vectors obtained from MDS
-        if not isinstance(Labels, np.ndarray):
+        if num_clusters >= 2 and cluster_method in ["K-Means", "Gaussian"]:
             # Apply K-Means clustering if no labels are provided
             if cluster_method == "K-Means":
                 KMeans_Cluster_TS = KMeans(n_clusters = num_clusters, init = "k-means++")
@@ -47,26 +47,32 @@ class ClusterVTECDataMDS:
                 
                 # Print evaluation scores
                 print(f"--Scores with GaussianMix clustering--\nSH coefficient = {silhouette_score_gaussmix}\nCH index = {CH_score_gaussmix}\nDB index = {DB_score_gaussmix}")
+
+            # Calculate and print the total number of series in each cluster
+            TotalSeriesPerCluster = dict(Counter(self.Xc_Labels))
+            print("--Total series for every cluster--")
+            for key_cluster in sorted(list(TotalSeriesPerCluster.keys())):
+                print(f"{key_cluster} -> {TotalSeriesPerCluster[key_cluster]}")
+
+            # Compute distances to centroids and sort each cluster
+            self.cluster_order = {}  # Dictionary to store ordered indices per cluster
+            for cluster in range(num_clusters):
+                indices_in_cluster = np.where(self.Xc_Labels == cluster)[0]
+                distances = np.linalg.norm(self.Xc_TS[indices_in_cluster] - self.centers[cluster], axis=1)
+                sorted_indices = indices_in_cluster[np.argsort(distances)]  # Sort indices by distance
+                self.cluster_order[cluster] = sorted_indices  # Store the ordered indices
+
         else:
             # If labels are provided, no clustering is performed
             self.Xc_Labels = None
-        
-        # Calculate and print the total number of series in each cluster
-        TotalSeriesPerCluster = dict(Counter(self.Xc_Labels))
-        print("--Total series for every cluster--")
-        for key_cluster in sorted(list(TotalSeriesPerCluster.keys())):
-            print(f"{key_cluster} -> {TotalSeriesPerCluster[key_cluster]}")
 
     def VisualizeClustering(self, Labels = None) -> None:
+        self.__ColorLabels = None
         # Visualize the clustering results
         if isinstance(Labels, np.ndarray):
             # Use provided labels for visualization
             self.__ColorLabels = colormaps["brg"](Normalize(vmin = Labels.min(), vmax = Labels.max())(Labels))
-            self.__MDS_TScluster.VisualizeVectors(Colors = self.__ColorLabels)
         elif Labels == None and isinstance(self.Xc_Labels, np.ndarray):
             # Visualize based on calculated cluster labels if available
             self.__ColorLabels = colormaps["brg"](Normalize(vmin = self.Xc_Labels.min(), vmax = self.Xc_Labels.max())(self.Xc_Labels))
-            self.__MDS_TScluster.VisualizeVectors(Colors = self.__ColorLabels)
-        else:
-            # Handle the case where labels are not defined
-            print("Labels are not defined or were not given. Please check")
+        self.__MDS_TScluster.VisualizeVectors(Colors = self.__ColorLabels)
