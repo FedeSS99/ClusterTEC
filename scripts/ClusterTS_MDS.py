@@ -1,19 +1,48 @@
 from scripts.libraries import *
 
 class ClusterVTECDataMDS:
-    def __init__(self, dissimilarity:np.ndarray) -> None:
-        # Initialize with a dissimilarity matrix
+    """
+    Class to perform clustering on VTEC data using Multidimensional Scaling (MDS).
+    """
+    def __init__(self, dissimilarity: np.ndarray) -> None:
+        """
+        Initialize the class with a dissimilarity matrix.
+
+        Parameters:
+        - dissimilarity: Precomputed dissimilarity matrix for the data.
+        """
         self.__dissimilarity_matrix = dissimilarity
 
-    def ComputeMDS(self, num_comps_mds = 2, method = "Classic", max_iter : int = 500, eps : float = 1e-6, verbose : int = 0, visualize_shepard : bool = True) -> float:
+    def ComputeMDS(self, num_comps_mds=2, method="Classic", max_iter: int = 500, eps: float = 1e-6, verbose: int = 0, visualize_shepard: bool = True) -> float:
+        """
+        Perform Multidimensional Scaling (MDS) on the dissimilarity matrix.
+
+        Parameters:
+        - num_comps_mds: Number of components for MDS.
+        - method: MDS method ("Classic" or other).
+        - max_iter: Maximum number of iterations.
+        - eps: Convergence tolerance.
+        - verbose: Verbosity level.
+        - visualize_shepard: Whether to visualize Shepard diagram.
+
+        Returns:
+        - Normalized stress value as a measure of MDS quality.
+        """
         # Perform MDS (Multidimensional Scaling) on the dissimilarity matrix
-        self.__MDS_TScluster = ClustTimeMDS(self.__dissimilarity_matrix)
+        self.__MDS_TScluster = TimeSeriesMDS(self.__dissimilarity_matrix)
         self.Xc_TS = self.__MDS_TScluster.fit(num_comps_mds, method = method, max_iter = max_iter, eps = eps, verbose = verbose, visualize_shepard = visualize_shepard)
 
         # Return the normalized stress value as a measure of MDS quality
         return self.__MDS_TScluster.normalized_stress
 
-    def ClusterTSVectors(self, num_clusters = 2, cluster_method = "K-Means") -> None:
+    def ClusterTSVectors(self, num_clusters=2, cluster_method="K-Means") -> None:
+        """
+        Cluster the time series vectors obtained from MDS.
+
+        Parameters:
+        - num_clusters: Number of clusters.
+        - cluster_method: Clustering method ("K-Means" or "Gaussian").
+        """
         # Cluster the time series vectors obtained from MDS
         if num_clusters >= 2 and cluster_method in ["K-Means", "Gaussian"]:
             # Apply K-Means clustering if no labels are provided
@@ -66,7 +95,13 @@ class ClusterVTECDataMDS:
             # If labels are provided, no clustering is performed
             self.Xc_Labels = None
 
-    def VisualizeClustering(self, Labels = None) -> None:
+    def VisualizeClustering(self, Labels=None) -> None:
+        """
+        Visualize the clustering results.
+
+        Parameters:
+        - Labels: Optional array of labels for visualization.
+        """
         self.__ColorLabels = None
         # Visualize the clustering results
         if isinstance(Labels, np.ndarray):

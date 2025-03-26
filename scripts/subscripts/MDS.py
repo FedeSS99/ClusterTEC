@@ -5,28 +5,58 @@ from matplotlib.pyplot import subplots
 
 from sklearn.manifold import MDS
 
-class ClustTimeMDS:
-    def __init__(self, dissimilarity:np.ndarray) -> None:
+class TimeSeriesMDS:
+    """
+    TimeSeriesMDS class implements various methods for performing Multidimensional Scaling (MDS)
+    on time series data using different approaches.
+    """
+
+    def __init__(self, dissimilarity: np.ndarray) -> None:
+        """
+        Initialize the TimeSeriesMDS class with a dissimilarity matrix.
+
+        Parameters:
+        - dissimilarity: Dissimilarity matrix (NxN).
+        """
         self.__dissim = dissimilarity
 
         self.N = self.__dissim.shape[0]
         self.__H = np.eye(N = self.N) - (1/self.N)*np.full((self.N, self.N), 1.0)
 
     def __ComputeB(self):
+        """
+        Compute the double-centered matrix B from the dissimilarity matrix.
+        """
         self.__B = -0.5 * (self.__H @ (self.__dissim ** 2.0) @ self.__H.T)
 
     def __GetNthEigenValue(self) -> np.float32:
+        """
+        Compute the smallest positive eigenvalue of the matrix B.
+
+        Returns:
+        - Smallest positive eigenvalue.
+        """
         B_eigvals = np.linalg.eigvals(self.__B)
         B_eigvals = B_eigvals[B_eigvals > 0]
 
         return B_eigvals.min()
 
     def __GetEuclideanDistances(self):
+        """
+        Convert the dissimilarity matrix into a Euclidean distance matrix.
+        """
         MinEigVal = self.__GetNthEigenValue()
 
         self.__EuclidDist = np.sqrt((self.__dissim**2.0) - 2.0 * MinEigVal * (np.full((self.N, self.N), 1.0) - np.eye(N = self.N)))
 
     def __VisualizeShepardPlot(self, orig_dissim:np.ndarray, red_dissim:np.ndarray):
+        """
+        Visualize the Shepard plot comparing original and reduced dissimilarities.
+
+        Parameters:
+        - orig_dissim: Original dissimilarity matrix.
+        - red_dissim: Reduced dissimilarity matrix.
+        """
         Figure, Subplot = subplots(nrows = 1, ncols = 1, figsize = (6, 6))
 
         upper_triu_index = np.triu_indices(n = orig_dissim.shape[0], k = 1)
@@ -44,7 +74,16 @@ class ClustTimeMDS:
         Figure.tight_layout()
 
     def __compute_stress_1(self, D_orig, D_red):
-        """Compute Kruskal's Stress-1 given original and reduced dissimilarity matrices."""
+        """
+        Compute Kruskal's Stress-1 given original and reduced dissimilarity matrices.
+
+        Parameters:
+        - D_orig: Original dissimilarity matrix.
+        - D_red: Reduced dissimilarity matrix.
+
+        Returns:
+        - Stress-1 value.
+        """
         # Extract upper triangular parts (excluding diagonal) to avoid redundancy
         triu_idx = np.triu_indices_from(D_orig, k=1)
 
@@ -56,6 +95,20 @@ class ClustTimeMDS:
         return np.sqrt(num / denom)
 
     def fit(self, num_comps = 2, method = "Classic", max_iter : int = 500, eps : float = 1e-6, verbose:int  = 0, visualize_shepard : bool = True):
+        """
+        Fit the MDS model using the specified method and parameters.
+
+        Parameters:
+        - num_comps: Number of components for dimensionality reduction.
+        - method: MDS method to use (e.g., "classic", "SMACOF-euclidean").
+        - max_iter: Maximum number of iterations for SMACOF.
+        - eps: Convergence tolerance for SMACOF.
+        - verbose: Verbosity level for SMACOF.
+        - visualize_shepard: Whether to visualize the Shepard plot.
+
+        Returns:
+        - Reduced data matrix (Xc).
+        """
         if method == "classic":
             self.__ComputeB()
             self.__GetEuclideanDistances()
@@ -148,6 +201,12 @@ class ClustTimeMDS:
         return self.Xc
 
     def VisualizeVectors(self, Colors = None):
+        """
+        Visualize the reduced vectors in pairwise scatter plots and diagonal density plots.
+
+        Parameters:
+        - Colors: Optional array of colors for the scatter plots.
+        """
         num_dims = self.Xc.shape[1]
 
         Figure, Subplots = subplots(nrows = num_dims, ncols = num_dims, sharex = "col", figsize = (10, 10))

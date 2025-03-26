@@ -10,7 +10,12 @@ import numpy as np
 
 @contextlib.contextmanager
 def tqdm_joblib(tqdm_object):
-    """Context manager to patch joblib to report into tqdm progress bar given as argument"""
+    """
+    Context manager to patch joblib to report progress into a tqdm progress bar.
+
+    Parameters:
+    - tqdm_object: tqdm progress bar object.
+    """
     class TqdmBatchCompletionCallback(joblib.parallel.BatchCompletionCallBack):
         def __call__(self, *args, **kwargs):
             tqdm_object.update(n=self.batch_size)
@@ -24,29 +29,45 @@ def tqdm_joblib(tqdm_object):
         joblib.parallel.BatchCompletionCallBack = old_batch_callback
         tqdm_object.close()
 
-def FindDataTendency(input_data:np.ndarray, window_size:int, dt:float) -> int:
+def FindDataTendency(input_data: np.ndarray, window_size: int, dt: float) -> int:
+    """
+    Find the tendency of the input data using the Savitzky-Golay filter.
+
+    Parameters:
+    - input_data: Input data array.
+    - window_size: Window size for the filter.
+    - dt: Time step for the filter.
+
+    Returns:
+    - Filtered data representing the tendency.
+    """
     #Pre computed values for optimar order and error for the filter
     #are written, expecting to be changed through the next loop
-    MSE = np.inf
-    optimal_order = 1
+    poly_orders = np.arange(1, 11)
+    MSE_array = np.zeros_like(poly_orders, dtype = np.float64)
     # Only explore polynomial orders from 1 to 10
-    for order in range(1, 11):
+    for p, order in enumerate(poly_orders):
         data_tendency = savgol_filter(input_data, window_size, order, 
                                           delta=dt, mode="interp")
 
         # Compute MSE of the difference between input data and its tendency
-        current_MSE = ((input_data - data_tendency)**2.0).sum()
+        MSE_array[p] = ((input_data - data_tendency)**2.0).mean()
 
-        if current_MSE < MSE:
-            MSE = current_MSE
-            optimal_order = order
-
-    tec_tendency = savgol_filter(input_data, window_size, optimal_order, 
-                                 delta=dt, mode="interp")
+    tec_tendency = savgol_filter(input_data, window_size, poly_orders[np.argmin(MSE_array)], 
+                                 delta=dt, mode = "interp")
 
     return tec_tendency
 
-def GetHourMinuteSecond(time:np.ndarray) -> tuple[np.ndarray]:
+def GetHourMinuteSecond(time: np.ndarray) -> tuple[np.ndarray]:
+    """
+    Convert time in decimal hours to hours, minutes, and seconds.
+
+    Parameters:
+    - time: Array of time values in decimal hours.
+
+    Returns:
+    - List of tuples containing (hour, minute, second) for each time value.
+    """
     integer_hours = time.astype(int)
     minutes_from_fraction = 60 * (time - integer_hours)
     integer_minutes = minutes_from_fraction.astype(int)
@@ -59,7 +80,19 @@ def GetHourMinuteSecond(time:np.ndarray) -> tuple[np.ndarray]:
 
     return [(hour, minute, second) for hour, minute, second in zip(integer_hours, integer_minutes, integer_seconds)]
 
-def GetProminentContours(power_array:np.ndarray, labels_array:np.ndarray, time_seq:np.ndarray, period_seq:np.ndarray):
+def GetProminentContours(power_array: np.ndarray, labels_array: np.ndarray, time_seq: np.ndarray, period_seq: np.ndarray):
+    """
+    Extract the most prominent contour from a labeled array.
+
+    Parameters:
+    - power_array: Array of power values.
+    - labels_array: Labeled array of regions.
+    - time_seq: Time sequence corresponding to the array.
+    - period_seq: Period sequence corresponding to the array.
+
+    Returns:
+    - Tuple containing bounding box coordinates of the prominent contour.
+    """
     gray_image = 255 * np.copy(labels_array).astype(np.uint8)
 
     contours = cv2.findContours(gray_image, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)[0]
@@ -81,13 +114,13 @@ def GetProminentContours(power_array:np.ndarray, labels_array:np.ndarray, time_s
 def calculate_curvature(y, x=None):
     """
     Calculate the curvature (κ) of a curve defined by the points y(x).
-    
+
     Parameters:
-    y (numpy array): Array of y-values.
-    x (numpy array, optional): Array of x-values. If not provided, assumes uniform spacing.
-    
+    - y: Array of y-values.
+    - x: Array of x-values (optional). If not provided, assumes uniform spacing.
+
     Returns:
-    curvature (numpy array): Curvature values along the curve.
+    - Curvature values along the curve.
     """
     # If no x is provided, assume uniform spacing
     if x is None:
@@ -105,13 +138,40 @@ def calculate_curvature(y, x=None):
     return curvature
 
 NormKernel = lambda u: ((2.0 * np.pi) ** -0.5) * np.exp(-0.5 * u * u)
+# NormKernel: Gaussian kernel function for kernel regression.
 
-def KernelRegression(x, X, Y, h, Kernel = NormKernel):
+def KernelRegression(x, X, Y, h, Kernel=NormKernel):
+    """
+    Perform kernel regression to estimate the value of Y at a given x.
+
+    Parameters:
+    - x: Point at which to estimate Y.
+    - X: Array of independent variable values.
+    - Y: Array of dependent variable values.
+    - h: Bandwidth for the kernel.
+    - Kernel: Kernel function (default is Gaussian).
+
+    Returns:
+    - Estimated value of Y at x.
+    """
     ValsKernel = Kernel((x - X)/h)
     Y_regression = (Y * ValsKernel).sum()/ValsKernel.sum()
     return Y_regression
 
-def find_best_KR_bandwidth(X, Y, h_values, n_splits = 5, Kernel = NormKernel):
+def find_best_KR_bandwidth(X, Y, h_values, n_splits=5, Kernel=NormKernel):
+    """
+    Perform Leave-One-Out Cross Validation (LOOCV) to find the best bandwidth for kernel regression.
+
+    Parameters:
+    - X: Array of independent variable values.
+    - Y: Array of dependent variable values.
+    - h_values: Array of bandwidth values to test.
+    - n_splits: Number of splits for cross-validation.
+    - Kernel: Kernel function (default is Gaussian).
+
+    Returns:
+    - Optimal bandwidth value.
+    """
     # Leave-One-Out cross validation to find best bandwidth for Kernel Regression
     print("--Leave-One-Out Cross Validation for Kernel Regression bandwidth--")
     KF = KFold(n_splits = n_splits, shuffle = True)

@@ -1,11 +1,32 @@
 from scripts.libraries import *
 
 class VTECDataReader:
-    def __init__(self, dirs:list[str], min_amplitude:float = 0.1) -> None:
-        self.__dirs :list[str] = dirs
+    """
+    Class to read, process, and extract VTEC data from input files.
+    """
+    def __init__(self, dirs: list[str], min_amplitude: float = 0.1, window_size: int = 120) -> None:
+        """
+        Initialize the VTECDataReader with directories and minimum amplitude.
+
+        Parameters:
+        - dirs: List of directories containing VTEC data files.
+        - min_amplitude: Minimum amplitude threshold for filtering data.
+        - window_size: size of the moving window for savitzky golay filter
+        """
+        self.__dirs: list[str] = dirs
         self.min_amplitude = min_amplitude
+        self.window_size = window_size
 
     def __save_cmn_data(self, filename_dir):
+        """
+        Read and parse a .Cmn file to extract VTEC data.
+
+        Parameters:
+        - filename_dir: Path to the .Cmn file.
+
+        Returns:
+        - Dictionary containing date, PRN, time, and VTEC data.
+        """
         filename = filename_dir.split("/")[-1].split("-")
         date_string = "-".join(filename[1:])
         date_string = date_string.replace(".Cmn", "")
@@ -41,75 +62,116 @@ class VTECDataReader:
         return {"date":date_datetime, "PRN": PRN_data, "time":time_data, "vtec": vtec_data}
 
     def __detrend_tec_data(self, time, tec_data, window_size):
+        """
+        Detrend TEC data using a moving window.
+
+        Parameters:
+        - time: Array of time values.
+        - tec_data: Array of TEC values.
+        - window_size: Size of the moving window.
+
+        Returns:
+        - Detrended TEC data.
+        """
         sampling_time = np.diff(time).mean().astype("timedelta64[s]").item().total_seconds()
         tec_tendency = FindDataTendency(tec_data, window_size, sampling_time)
+        dtec = tec_data - tec_tendency
 
-        return tec_data - tec_tendency
+        return dtec
     
-    def __separate_and_detrend_data_by_PRN(self) -> None:
-        self.satellite_data_by_PRN = dict()
+    def __split_sequences(self, time_array, vtec_array, median_diff, window_size):
+        """
+        Split time and VTEC sequences based on time jumps and filter by minimum size.
 
+        Parameters:
+        - time_array: Array of time values.
+        - vtec_array: Array of VTEC values.
+        - median_diff: Median time difference for detecting jumps.
+        - window_size: Minimum size for valid sequences.
+
+        Returns:
+        - Filtered and split time and VTEC sequences.
+        """
+        jump_indexes = np.argwhere(np.diff(time_array).astype("timedelta64[s]") > 2 * median_diff)[:, 0] + 1
+        time_splits = np.array_split(time_array, jump_indexes)
+        vtec_splits = np.array_split(vtec_array, jump_indexes)
+
+        filtered_time = []
+        filtered_vtec = []
+        for time_seq, vtec_seq in zip(time_splits, vtec_splits):
+            if time_seq.size >= 2 * window_size:
+                filtered_time.append(time_seq)
+                filtered_vtec.append(vtec_seq)
+
+        return filtered_time, filtered_vtec
+
+    def __detrend_sequences(self, time_sequences, vtec_sequences, window_size):
+        """
+        Detrend VTEC sequences.
+
+        Parameters:
+        - time_sequences: List of time sequences.
+        - vtec_sequences: List of VTEC sequences.
+        - window_size: Size of the moving window.
+
+        Returns:
+        - List of detrended VTEC sequences.
+        """
+        detrended_sequences = []
+        for time_seq, vtec_seq in zip(time_sequences, vtec_sequences):
+            detrended_sequences.append(self.__detrend_tec_data(time_seq, vtec_seq, window_size))
+        return detrended_sequences
+
+    def __separate_and_detrend_data_by_PRN(self) -> None:
+        """
+        Separate VTEC data by PRN and detrend the time series.
+        """
+        self.satellite_data_by_PRN = {}
         print("\n--Separate each Cmn file by PRN--")
         for cmn_data in tqdm(self.satellite_data):
-            AvailablePRN = tuple(set(cmn_data["PRN"]))
-            cmn_date = cmn_data["date"]
-            year, month, day = cmn_date.year, cmn_date.month, cmn_date.day
-
-            for PRN in AvailablePRN:
+            for PRN in set(cmn_data["PRN"]):
                 PRN_indexes = np.argwhere(cmn_data["PRN"] == PRN)[:, 0]
-                hour_minute_second_by_PRN = GetHourMinuteSecond(cmn_data["time"][PRN_indexes])
+                times = GetHourMinuteSecond(cmn_data["time"][PRN_indexes])
+                complete_dates = [datetime(cmn_data["date"].year, cmn_data["date"].month, cmn_data["date"].day, *t) for t in times]
 
-                complete_date_localtime = [datetime(year, month ,day, hour, minute, second) for hour, minute, second in hour_minute_second_by_PRN]
+                if PRN not in self.satellite_data_by_PRN:
+                    self.satellite_data_by_PRN[PRN] = {"time": [], "vtec": []}
+                self.satellite_data_by_PRN[PRN]["time"].extend(complete_dates)
+                self.satellite_data_by_PRN[PRN]["vtec"] = np.concatenate((self.satellite_data_by_PRN[PRN]["vtec"], cmn_data["vtec"][PRN_indexes]))
 
-                if PRN in self.satellite_data_by_PRN.keys():
-                    self.satellite_data_by_PRN[PRN]["time"] += complete_date_localtime
-                    self.satellite_data_by_PRN[PRN]["vtec"] = np.concatenate((self.satellite_data_by_PRN[PRN]["vtec"], cmn_data["vtec"][PRN_indexes]))
-                else:
-                    self.satellite_data_by_PRN[PRN] = dict(time = complete_date_localtime,
-                                                           vtec = cmn_data["vtec"][PRN_indexes])
         del self.satellite_data
-        window_size = 240
 
         print("\n--Detrend time series by PRN--")
-        AllAvailablePRN = tuple(self.satellite_data_by_PRN.keys()) 
-        for PRN in tqdm(AllAvailablePRN):
-            self.satellite_data_by_PRN[PRN]["time"] = np.array(self.satellite_data_by_PRN[PRN]["time"], dtype = np.datetime64)
-            
-            diff_times = np.diff(self.satellite_data_by_PRN[PRN]["time"]).astype("timedelta64[s]")
-            median_diff_times = np.median(diff_times)
-            jump_indexes_by_PRN = np.argwhere(diff_times > 2*median_diff_times)[:, 0] + 1
+        for PRN, data in tqdm(self.satellite_data_by_PRN.items()):
+            data["time"] = np.array(data["time"], dtype=np.datetime64)
+            median_diff = np.median(np.diff(data["time"]).astype("timedelta64[s]"))
 
-            self.satellite_data_by_PRN[PRN]["time"] = np.array_split(self.satellite_data_by_PRN[PRN]["time"], jump_indexes_by_PRN)
-            self.satellite_data_by_PRN[PRN]["vtec"] = np.array_split(self.satellite_data_by_PRN[PRN]["vtec"], jump_indexes_by_PRN)
-            self.satellite_data_by_PRN[PRN]["dtec"] = [np.zeros(vtec_seq.shape) for vtec_seq in self.satellite_data_by_PRN[PRN]["vtec"]]
+            time_splits, vtec_splits = self.__split_sequences(data["time"], data["vtec"], median_diff, self.window_size)
+            detrended_splits = self.__detrend_sequences(time_splits, vtec_splits, self.window_size)
 
-            indexes_to_remove_by_PRN = []
-            for k, time_vtec_seq in enumerate(zip(self.satellite_data_by_PRN[PRN]["time"], self.satellite_data_by_PRN[PRN]["vtec"])):
-                if time_vtec_seq[0].size >= 2.0 * window_size:
-                    detrended_vtec = self.__detrend_tec_data(*time_vtec_seq, window_size)
-                    self.satellite_data_by_PRN[PRN]["dtec"][k][:] = detrended_vtec
-                else:
-                    indexes_to_remove_by_PRN.append(k)
+            data["time"], data["vtec"], data["dtec"] = time_splits, vtec_splits, detrended_splits
 
-            self.satellite_data_by_PRN[PRN]["time"] = [time_seq for k, time_seq in enumerate(self.satellite_data_by_PRN[PRN]["time"]) if k not in indexes_to_remove_by_PRN]
-            self.satellite_data_by_PRN[PRN]["vtec"] = [vtec_seq for k, vtec_seq in enumerate(self.satellite_data_by_PRN[PRN]["vtec"]) if k not in indexes_to_remove_by_PRN]
-            self.satellite_data_by_PRN[PRN]["dtec"] = [dtec_seq for k, dtec_seq in enumerate(self.satellite_data_by_PRN[PRN]["dtec"]) if k not in indexes_to_remove_by_PRN]
-
-        AllAvailablePRN = tuple(self.satellite_data_by_PRN.keys()) 
-        self.time_sequences = tuple([time_seq for PRN in AllAvailablePRN for time_seq in self.satellite_data_by_PRN[PRN]["time"]])
-        self.vtec_sequences = tuple([vtec_seq for PRN in AllAvailablePRN for vtec_seq in self.satellite_data_by_PRN[PRN]["vtec"]])
-        self.dtec_sequences = tuple([dtec_seq for PRN in AllAvailablePRN for dtec_seq in self.satellite_data_by_PRN[PRN]["dtec"]])
-        self.__PRN_per_seq = []
-        for PRN in AllAvailablePRN:
-            self.__PRN_per_seq += len(self.satellite_data_by_PRN[PRN]["time"])*[PRN]
+        self.time_sequences = tuple([seq for data in self.satellite_data_by_PRN.values() for seq in data["time"]])
+        self.vtec_sequences = tuple([seq for data in self.satellite_data_by_PRN.values() for seq in data["vtec"]])
+        self.dtec_sequences = tuple([seq for data in self.satellite_data_by_PRN.values() for seq in data["dtec"]])
+        self.prn_sequences = [PRN for PRN, data in self.satellite_data_by_PRN.items() for _ in data["time"]]
         del self.satellite_data_by_PRN
 
     def __remove_data_by_max_amplitude(self, min_amplitude):
+        """
+        Remove time series with maximum amplitude below the threshold.
+
+        Parameters:
+        - min_amplitude: Minimum amplitude threshold.
+        """
         abs_max_vtec_values = np.array(tuple([max(abs(vtec_seq.min()), vtec_seq.max()) for vtec_seq in self.dtec_sequences]))
         indexes_by_quantiles = np.argwhere(abs_max_vtec_values >= min_amplitude)[:,0]
-        self.time_sequences, self.vtec_sequences, self.dtec_sequences, self.__PRN_per_seq  = zip(*[time_vtec_PRN for k, time_vtec_PRN in enumerate(zip(self.time_sequences, self.vtec_sequences, self.dtec_sequences, self.__PRN_per_seq)) if k in indexes_by_quantiles])
+        self.time_sequences, self.vtec_sequences, self.dtec_sequences, self.prn_sequences  = zip(*[time_vtec_PRN for k, time_vtec_PRN in enumerate(zip(self.time_sequences, self.vtec_sequences, self.dtec_sequences, self.prn_sequences)) if k in indexes_by_quantiles])
 
     def read_and_extract_vtec_data(self):
+        """
+        Read VTEC data from files, process it, and extract relevant time series.
+        """
         self.__list_cmn_files :list[str] = []
         for dir in self.__dirs:
             for month in listdir(dir):
@@ -128,4 +190,5 @@ class VTECDataReader:
         self.satellite_data = tuple(self.satellite_data)
 
         self.__separate_and_detrend_data_by_PRN()
-        self.__remove_data_by_max_amplitude(min_amplitude = self.min_amplitude)
+        if self.min_amplitude != 0.0:
+            self.__remove_data_by_max_amplitude(min_amplitude = self.min_amplitude)

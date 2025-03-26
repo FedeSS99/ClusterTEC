@@ -3,7 +3,20 @@ from tqdm import tqdm
 from scipy.stats.mstats import mquantiles
 
 class SYNCLUS:
-    def __init__(self, dissim:np.ndarray, K:int, iter:int, reps:int) -> None:
+    """
+    SYNCLUS class implements a clustering algorithm based on minimizing a dissimilarity measure.
+    """
+
+    def __init__(self, dissim: np.ndarray, K: int, iter: int, reps: int) -> None:
+        """
+        Initialize the SYNCLUS class with dissimilarity matrix, number of clusters, iterations, and repetitions.
+
+        Parameters:
+        - dissim: Dissimilarity matrix (NxN).
+        - K: Number of clusters.
+        - iter: Maximum number of iterations for KMeans.
+        - reps: Number of repetitions for the clustering process.
+        """
         self.K = K
         self.iter = iter
         self.reps = reps
@@ -14,17 +27,39 @@ class SYNCLUS:
 
 
     def __random_centroids(self):
+        """
+        Generate random initial centroids for the clustering process.
+        """
         RNG = np.random.default_rng()
         centroids = RNG.choice(np.arange(self.D2.shape[0]), self.K, replace = False)
 
         return centroids
     
     def __assign_centers(self, centers, N):
+        """
+        Assign initial cluster labels to the centroids.
+
+        Parameters:
+        - centers: Indices of the centroids.
+        - N: Total number of data points.
+
+        Returns:
+        - clusters: Array with cluster assignments.
+        """
         clusters = np.zeros(N)
         clusters[centers] = np.arange(1, centers.size + 1)
         return clusters
 
     def __initial_assign(self, centers):
+        """
+        Assign each data point to the nearest centroid.
+
+        Parameters:
+        - centers: Indices of the centroids.
+
+        Returns:
+        - clus: Array with initial cluster assignments.
+        """
         N = self.D2.shape[0]
 
         # Assign initial clusters for the centroids
@@ -41,6 +76,12 @@ class SYNCLUS:
 
 
     def __KMeans_SYNCLUS(self):    
+        """
+        Perform the KMeans clustering algorithm with the SYNCLUS approach.
+
+        Returns:
+        - Dictionary containing start clusters, end clusters, and EP values.
+        """
         centers = self.__random_centroids()  # Initial centroids
     
         # Initial assignment of points to clusters
@@ -91,6 +132,12 @@ class SYNCLUS:
         }
 
     def __preKMeans(self):
+        """
+        Preprocess the data and handle edge cases before running KMeans.
+
+        Returns:
+        - Dictionary containing start clusters, end clusters, and EP values.
+        """
         N = self.D2.shape[0]
 
         if self.K == 1:
@@ -116,6 +163,12 @@ class SYNCLUS:
         return {"start_clusters":start_clusters, "end_clusters":end_clusters, "EP":EP}
  
     def fit_predict(self):
+        """
+        Run the SYNCLUS algorithm for the specified number of repetitions and return the best clustering result.
+
+        Returns:
+        - Dictionary containing the best clustering result based on the minimum EP value.
+        """
         for index in tqdm(range(self.reps)):
             KMeans_results = self.__preKMeans()
 
