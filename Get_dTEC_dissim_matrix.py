@@ -13,18 +13,19 @@ if __name__ == "__main__":
     dj = 0.0625
 
     try:
-        with open("./data/PTEX_DTEC_series.dat", "r") as DTECin:
+        with open("./data/PTEX_dtec_series.dat", "r") as DTECin:
             file_lines = DTECin.readlines()
     except FileNotFoundError:
         print("Error: El archivo no fue encontrado.")
         exit()
 
     total_series = int(file_lines[0])
+    prn_subseries = tuple([int(file_lines[n-2]) for n in range(3, 3*total_series + 1, 3)])
     with tqdm_joblib(tqdm(total= total_series)) as progress_bar:
         dtec_subseries = Parallel(n_jobs=-1)(delayed(extract_prominent_series)(n,
                                     array([datetime.fromisoformat(x.strip()) for x in file_lines[n-1].split(",")]),
                                     array(file_lines[n].split(","), dtype=float),
-                                    wavelet, dj) for n in range(2, 2*total_series + 1, 2))
+                                    wavelet, dj) for n in range(3, 3*total_series + 1, 3))
 
     dtec_subseries = [s for s in sorted(dtec_subseries, key=lambda x: x[0]) if len(s) == 3]
     time_subseries = tuple(s[1] for s in dtec_subseries)
@@ -32,9 +33,10 @@ if __name__ == "__main__":
     total_series = len(dtec_subseries)
     print(f"Total of series: {total_series}")
     print("-- Saving dTEC subseries --")
-    with open("./data/PTEX_DTEC_subseries.dat", "+w") as PTEX_sub_out:
+    with open("./data/PTEX_dtec_subseries.dat", "+w") as PTEX_sub_out:
         PTEX_sub_out.write(f"{total_series}\n")
         for n in tqdm(range(total_series)):
+            PTEX_sub_out.write(f"{prn_subseries[n]}\n")
             PTEX_sub_out.write(", ".join(list(map(lambda x: str(x), time_subseries[n]))) + "\n")
             PTEX_sub_out.write(", ".join(list(map(lambda x: str(x), dtec_subseries[n]))) + "\n")
 
