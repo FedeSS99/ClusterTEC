@@ -21,4 +21,4 @@ from matplotlib import colormaps
 from matplotlib.colors import Normalize
 
 from scripts.subscripts.MiscellanousFunctions import tqdm_joblib, GetHourMinuteSecond, GetProminentContours, FindDataTendency
-from scripts.subscripts.MDS import ClustTimeMDS
+from scripts.subscripts.MDS import TimeSeriesMDS
