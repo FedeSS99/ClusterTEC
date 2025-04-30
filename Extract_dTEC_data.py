@@ -1,10 +1,10 @@
 from scripts.VTECDataReader import VTECDataReader
 
 if __name__ == "__main__":
-    PTEX_dir = ["/home/fsamaniego/Documents/FCFM/Proyecto TIDs/Data/CMN Files/PTEX/2018",
-            "/home/fsamaniego/Documents/FCFM/Proyecto TIDs/Data/CMN Files/PTEX/2019"]
+    PTEX_dir = ["/home/federico/Documents/FCFM/Proyecto TIDs/Data/CMN Files/PTEX/2018",
+            "/home/federico/Documents/FCFM/Proyecto TIDs/Data/CMN Files/PTEX/2019"]
     
-    PTEX_VTEC = VTECDataReader(dirs = PTEX_dir, min_amplitude = 0.18695, window = 240)
+    PTEX_VTEC = VTECDataReader(dirs = PTEX_dir, min_amplitude = 0.18695, window_size = 240)
 
     PTEX_VTEC.read_and_extract_vtec_data()
 
