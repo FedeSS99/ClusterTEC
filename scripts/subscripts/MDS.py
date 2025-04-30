@@ -23,13 +23,13 @@ class TimeSeriesMDS:
         self.N = self.__dissim.shape[0]
         self.__H = np.eye(N = self.N) - (1/self.N)*np.full((self.N, self.N), 1.0)
 
-    def __ComputeB(self):
+    def __compute_euclidean_B(self):
         """
         Compute the double-centered matrix B from the dissimilarity matrix.
         """
         self.__B = -0.5 * (self.__H @ (self.__dissim ** 2.0) @ self.__H.T)
 
-    def __GetNthEigenValue(self) -> np.float32:
+    def __get_smallest_eigen_value(self) -> np.float32:
         """
         Compute the smallest positive eigenvalue of the matrix B.
 
@@ -37,15 +37,16 @@ class TimeSeriesMDS:
         - Smallest positive eigenvalue.
         """
         B_eigvals = np.linalg.eigvals(self.__B)
-        B_eigvals = B_eigvals[B_eigvals > 0]
+        min_B_eigen_values = B_eigvals[B_eigvals > 0].min()
 
-        return B_eigvals.min()
+        return min_B_eigen_values
 
     def __GetEuclideanDistances(self):
         """
         Convert the dissimilarity matrix into a Euclidean distance matrix.
         """
-        MinEigVal = self.__GetNthEigenValue()
+        self.__compute_euclidean_B()
+        MinEigVal = self.__get_smallest_eigen_value()
 
         self.__EuclidDist = np.sqrt((self.__dissim**2.0) - 2.0 * MinEigVal * (np.full((self.N, self.N), 1.0) - np.eye(N = self.N)))
 
@@ -94,7 +95,7 @@ class TimeSeriesMDS:
         # Compute Stress-1
         return np.sqrt(num / denom)
 
-    def fit(self, num_comps = 2, method = "Classic", max_iter : int = 500, eps : float = 1e-6, verbose:int  = 0, visualize_shepard : bool = True):
+    def fit(self, num_comps=2, method="Classic", max_iter=500, eps=1e-6, verbose=0, visualize_shepard=True):
         """
         Fit the MDS model using the specified method and parameters.
 
@@ -109,123 +110,102 @@ class TimeSeriesMDS:
         Returns:
         - Reduced data matrix (Xc).
         """
-        if method == "classic":
-            self.__ComputeB()
-            self.__GetEuclideanDistances()
+        def compute_classic_embedding(dissimilarity_matrix):
+            """Compute the classic MDS embedding."""
+            B = -0.5 * (self.__H @ (dissimilarity_matrix ** 2.0) @ self.__H.T)
+            eigvals, eigvecs = np.linalg.eigh(B)
+            return np.fliplr(np.sqrt(eigvals[-num_comps:]) * eigvecs[:, -num_comps:])
 
-            B_euclid = - 0.5 * (self.__H @ (self.__EuclidDist**2.0) @ self.__H.T)
+        def compute_smacof_embedding(dissimilarity_matrix, init_conf=None):
+            """Compute the SMACOF MDS embedding."""
+            mds = MDS(
+                n_components=num_comps,
+                n_jobs=-1,
+                dissimilarity="precomputed",
+                max_iter=max_iter,
+                eps=eps,
+                verbose=verbose,
+                n_init=1 if init_conf is not None else 4,
+            )
+            return mds.fit(dissimilarity_matrix, init=init_conf).embedding_
 
-            EigVals_B_euclid, EigVecs_B_euclid = np.linalg.eigh(B_euclid)
-            self.Xc = np.fliplr(np.sqrt(EigVals_B_euclid[EigVals_B_euclid.size - num_comps:]) * EigVecs_B_euclid[:, EigVals_B_euclid.size - num_comps:])
+        def process_method(dissimilarity_matrix, use_euclidean=False, use_smacof=False, use_classic_init=False):
+            """Process the specified method and compute the embedding."""
+            if use_euclidean:
+                self.__GetEuclideanDistances()
+                dissimilarity_matrix = self.__EuclidDist
+
+            if use_smacof:
+                init_conf = None
+                if use_classic_init:
+                    init_conf = compute_classic_embedding(dissimilarity_matrix)
+                self.Xc = compute_smacof_embedding(dissimilarity_matrix, init_conf)
+            else:
+                self.Xc = compute_classic_embedding(dissimilarity_matrix)
 
             distances_Xc = euclidean_distances(self.Xc)
-            self.normalized_stress = self.__compute_stress_1(self.__EuclidDist, distances_Xc)
+            self.normalized_stress = self.__compute_stress_1(dissimilarity_matrix, distances_Xc)
 
             if visualize_shepard:
-                self.__VisualizeShepardPlot(self.__EuclidDist, distances_Xc)
-        
-        elif method == "dissim":
-            self.__ComputeB()
+                self.__VisualizeShepardPlot(dissimilarity_matrix, distances_Xc)
 
-            EigVals_B_dissim, EigVecs_B_dissim = np.linalg.eigh(self.__B)
-            self.Xc = np.fliplr(np.sqrt(EigVals_B_dissim[EigVals_B_dissim.size - num_comps:]) * EigVecs_B_dissim[:, EigVals_B_dissim.size - num_comps:])
+        # Map methods to their configurations
+        method_config = {
+            "classic": {"use_euclidean": True, "use_smacof": False, "use_classic_init": False},
+            "dissim": {"use_euclidean": False, "use_smacof": False, "use_classic_init": False},
+            "SMACOF-euclidean": {"use_euclidean": True, "use_smacof": True, "use_classic_init": False},
+            "SMACOF-dissim": {"use_euclidean": False, "use_smacof": True, "use_classic_init": False},
+            "SMACOF-euclidean-classic": {"use_euclidean": True, "use_smacof": True, "use_classic_init": True},
+            "SMACOF-dissim-classic": {"use_euclidean": False, "use_smacof": True, "use_classic_init": True},
+        }
 
-            distances_Xc = euclidean_distances(self.Xc)
-            self.normalized_stress = self.__compute_stress_1(self.__dissim, distances_Xc)
+        if method not in method_config:
+            raise ValueError(f"Unknown method: {method}")
 
-            if visualize_shepard:
-                self.__VisualizeShepardPlot(self.__dissim, distances_Xc)
+        # Process the method
+        config = method_config[method]
+        process_method(
+            dissimilarity_matrix=self.__dissim,
+            use_euclidean=config["use_euclidean"],
+            use_smacof=config["use_smacof"],
+            use_classic_init=config["use_classic_init"],
+        )
 
-        elif method == "SMACOF-euclidean":
-            self.__ComputeB()
-            self.__GetEuclideanDistances()
-            
-            MDS_TS = MDS(n_components = num_comps, n_jobs = -1, dissimilarity = "precomputed", max_iter = max_iter, eps = eps, verbose = verbose)
-            MDS_TS.fit(self.__EuclidDist)
-            self.Xc = MDS_TS.embedding_
-            distances_Xc = euclidean_distances(self.Xc)
-            self.normalized_stress = self.__compute_stress_1(self.__EuclidDist, distances_Xc)
-
-            if visualize_shepard:
-                self.__VisualizeShepardPlot(self.__EuclidDist, distances_Xc)
-
-
-        elif method == "SMACOF-dissim":
-            MDS_TS = MDS(n_components = num_comps, n_jobs = -1, dissimilarity = "precomputed", max_iter = max_iter, eps = eps, verbose = verbose)
-            MDS_TS.fit(self.__dissim)
-            self.Xc = MDS_TS.embedding_
-            distances_Xc = euclidean_distances(self.Xc)
-            self.normalized_stress = self.__compute_stress_1(self.__dissim, distances_Xc)
-
-            if visualize_shepard:
-                self.__VisualizeShepardPlot(self.__dissim, distances_Xc)
-
-    
-        elif method == "SMACOF-euclidean-classic":
-            self.__ComputeB()
-            self.__GetEuclideanDistances()
-    
-            B_euclid = -0.5 * (self.__H @ (self.__EuclidDist**2.0) @ self.__H.T)
-
-            EigVals_B_euclid, EigVecs_B_euclid = np.linalg.eigh(B_euclid)
-            init_conf = np.fliplr(np.sqrt(EigVals_B_euclid[EigVals_B_euclid.size - num_comps:]) * EigVecs_B_euclid[:, EigVals_B_euclid.size - num_comps:])
-
-            MDS_TS = MDS(n_components = num_comps, n_jobs = -1, dissimilarity = "precomputed", n_init = 1, max_iter = max_iter, eps = eps, verbose = verbose)
-            MDS_TS.fit(X = self.__EuclidDist, init = init_conf)
-            self.Xc = MDS_TS.embedding_
-            distances_Xc = euclidean_distances(self.Xc)
-            self.normalized_stress = self.__compute_stress_1(self.__EuclidDist, distances_Xc)
-
-            if visualize_shepard:
-                self.__VisualizeShepardPlot(self.__EuclidDist, distances_Xc)
-
-
-        elif method == "SMACOF-dissim-classic":    
-            B_Dissim = - 0.5 * (self.__H @ (self.__dissim**2.0) @ self.__H.T)
-
-            EigVals_B_Dissim, EigVecs_B_Dissim = np.linalg.eigh(B_Dissim)
-            init_conf = np.fliplr(np.sqrt(EigVals_B_Dissim[EigVals_B_Dissim.size - num_comps:]) * EigVecs_B_Dissim[:, EigVals_B_Dissim.size - num_comps:])
-
-            MDS_TS = MDS(n_components = num_comps, n_jobs = -1, dissimilarity = "precomputed", n_init = 1, max_iter = max_iter, eps = eps, verbose = verbose)
-            MDS_TS.fit(X = self.__dissim, init = init_conf)
-            self.Xc = MDS_TS.embedding_
-            distances_Xc = euclidean_distances(self.Xc)
-            self.normalized_stress = self.__compute_stress_1(self.__dissim, distances_Xc)
-    
-            if visualize_shepard:
-                self.__VisualizeShepardPlot(self.__dissim, distances_Xc)
-    
-
-        print(f"{method} with {num_comps} components has a stress-1 value of {self.normalized_stress :.6f}")
-
+        print(f"{method} with {num_comps} components has a stress-1 value of {self.normalized_stress:.6f}")
         return self.Xc
 
-    def VisualizeVectors(self, Colors = None):
+    def VisualizeVectors(self, Colors=None, Centroids=None):
         """
         Visualize the reduced vectors in pairwise scatter plots and diagonal density plots.
 
         Parameters:
         - Colors: Optional array of colors for the scatter plots.
+        - Centroids: Optional array of centroids to visualize.
         """
         num_dims = self.Xc.shape[1]
 
-        Figure, Subplots = subplots(nrows = num_dims, ncols = num_dims, sharex = "col", figsize = (10, 10))
+        Figure, Subplots = subplots(nrows=num_dims, ncols=num_dims, sharex="col", figsize=(10, 10))
         for n in range(num_dims):
-            kde_gaussian = gaussian_kde(self.Xc[:,n].flatten(), bw_method = "scott").evaluate(self.Xc[:,n])
-            ordered_X_n, KDE = zip(*sorted([(x, kde_x) for x, kde_x in zip(self.Xc[:,n].flatten(), kde_gaussian)], key = lambda e: e[0]))
+            kde_gaussian = gaussian_kde(self.Xc[:, n].flatten(), bw_method="scott").evaluate(self.Xc[:, n])
+            ordered_X_n, KDE = zip(*sorted([(x, kde_x) for x, kde_x in zip(self.Xc[:, n].flatten(), kde_gaussian)], key=lambda e: e[0]))
 
-            Subplots[n,n].plot(ordered_X_n, KDE, "-k")
-            Subplots[n,n].fill_between(ordered_X_n, KDE, alpha = 0.25, color = "black")
-            Subplots[n,n].set_ylim(bottom = 0.0)
+            Subplots[n, n].plot(ordered_X_n, KDE, "-k")
+            Subplots[n, n].fill_between(ordered_X_n, KDE, alpha=0.25, color="black")
+            Subplots[n, n].set_ylim(bottom=0.0)
 
             for m in range(num_dims):
                 if n != m:
-                    Subplots[n,m].axvline(linestyle = "-", color = "black", alpha = 0.5, zorder = 0)
-                    Subplots[n,m].axhline(linestyle = "-", color = "black", alpha = 0.5, zorder = 0)
+                    Subplots[n, m].axvline(linestyle="-", color="black", alpha=0.5, zorder=0)
+                    Subplots[n, m].axhline(linestyle="-", color="black", alpha=0.5, zorder=0)
                     if Colors is not None:
-                        Subplots[n,m].scatter(self.Xc[:,m], self.Xc[:,n], c = Colors, ec = "black", s = 12)
+                        Subplots[n, m].scatter(self.Xc[:, m], self.Xc[:, n], c=Colors, ec="black", s=12)
                     else:
-                        Subplots[n,m].scatter(self.Xc[:,m], self.Xc[:,n], marker = "o", fc = "black", ec = "black", s = 12)
+                        Subplots[n, m].scatter(self.Xc[:, m], self.Xc[:, n], marker="o", fc="black", ec="black", s=12)
 
-            Subplots[num_dims-1,n].set_xlabel(f"Coordinate {n + 1}")
+                    # Plot centroids if provided
+                    if Centroids is not None:
+                        Subplots[n, m].scatter(Centroids[:, m], Centroids[:, n], marker="X", c="red", s=50, label="Centroids")
+                        Subplots[n, m].legend(loc="upper right")
+
+            Subplots[num_dims - 1, n].set_xlabel(f"Coordinate {n + 1}")
         Figure.tight_layout()
