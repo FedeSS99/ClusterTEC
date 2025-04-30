@@ -1,6 +1,6 @@
 from scripts.libraries import *
 
-class ClusterVTECDataMDS:
+class ClusterMDS:
     """
     Class to perform clustering on VTEC data using Multidimensional Scaling (MDS).
     """
@@ -13,7 +13,7 @@ class ClusterVTECDataMDS:
         """
         self.__dissimilarity_matrix = dissimilarity
 
-    def ComputeMDS(self, num_comps_mds=2, method="Classic", max_iter: int = 500, eps: float = 1e-6, verbose: int = 0, visualize_shepard: bool = True) -> float:
+    def ComputeMDS(self, num_comps_mds = 2, method="Classic", max_iter: int = 500, eps: float = 1e-6, verbose: int = 0, visualize_shepard: bool = True) -> float:
         """
         Perform Multidimensional Scaling (MDS) on the dissimilarity matrix.
 
@@ -41,7 +41,7 @@ class ClusterVTECDataMDS:
 
         Parameters:
         - num_clusters: Number of clusters.
-        - cluster_method: Clustering method ("K-Means" or "Gaussian").
+        - cluster_method: Clustering method ("K-Means" or "GaussMix").
         """
         # Cluster the time series vectors obtained from MDS
         if num_clusters >= 2 and cluster_method in ["K-Means", "Gaussian"]:
@@ -49,33 +49,22 @@ class ClusterVTECDataMDS:
             if cluster_method == "K-Means":
                 KMeans_Cluster_TS = KMeans(n_clusters = num_clusters, init = "k-means++")
                 self.Xc_Labels = KMeans_Cluster_TS.fit_predict(self.Xc_TS)
-                
-                # Calculate clustering evaluation scores
-                silhouette_score_kmeans = silhouette_score(self.Xc_TS, self.Xc_Labels)
-                CH_score_kmeans = calinski_harabasz_score(self.Xc_TS, self.Xc_Labels)
-                DB_score_kmeans = davies_bouldin_score(self.Xc_TS, self.Xc_Labels)
-                
                 # Store cluster centers
                 self.centers = KMeans_Cluster_TS.cluster_centers_
-                
-                # Print evaluation scores
-                print(f"--Scores with K-Means clustering--\nSH coefficient = {silhouette_score_kmeans}\nCH index = {CH_score_kmeans}\nDB index = {DB_score_kmeans}")
             
             # Apply Gaussian Mixture clustering if specified
-            elif cluster_method == "Gaussian":
+            elif cluster_method == "GaussMix":
                 GaussianMix_Cluster_TS = GaussianMixture(n_components = num_clusters, covariance_type = "full")
                 self.Xc_Labels = GaussianMix_Cluster_TS.fit_predict(self.Xc_TS)
                 
-                # Calculate clustering evaluation scores
-                silhouette_score_gaussmix = silhouette_score(self.Xc_TS, self.Xc_Labels)
-                CH_score_gaussmix = calinski_harabasz_score(self.Xc_TS, self.Xc_Labels)
-                DB_score_gaussmix = davies_bouldin_score(self.Xc_TS, self.Xc_Labels)
-                
                 # Store cluster means as centers
                 self.centers = GaussianMix_Cluster_TS.means_
-                
-                # Print evaluation scores
-                print(f"--Scores with GaussianMix clustering--\nSH coefficient = {silhouette_score_gaussmix}\nCH index = {CH_score_gaussmix}\nDB index = {DB_score_gaussmix}")
+
+            # Calculate clustering evaluation scores
+            silhouette_score_cluster = silhouette_score(self.Xc_TS, self.Xc_Labels)
+            CH_score_kmeans_cluster = calinski_harabasz_score(self.Xc_TS, self.Xc_Labels)
+            DB_score_kmeans_cluster = davies_bouldin_score(self.Xc_TS, self.Xc_Labels)
+            print(f"--Scores with {cluster_method} clustering--\nSH coefficient = {silhouette_score_cluster}\nCH index = {CH_score_kmeans_cluster}\nDB index = {DB_score_kmeans_cluster}")
 
             # Calculate and print the total number of series in each cluster
             TotalSeriesPerCluster = dict(Counter(self.Xc_Labels))
@@ -110,4 +99,6 @@ class ClusterVTECDataMDS:
         elif Labels == None and isinstance(self.Xc_Labels, np.ndarray):
             # Visualize based on calculated cluster labels if available
             self.__ColorLabels = colormaps["brg"](Normalize(vmin = self.Xc_Labels.min(), vmax = self.Xc_Labels.max())(self.Xc_Labels))
-        self.__MDS_TScluster.VisualizeVectors(Colors = self.__ColorLabels)
+        
+        # Pass centroids to the visualization method
+        self.__MDS_TScluster.VisualizeVectors(Colors = self.__ColorLabels, Centroids = self.centers if hasattr(self, 'centers') else None)
