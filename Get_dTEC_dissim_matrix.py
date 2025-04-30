@@ -6,7 +6,7 @@ from joblib import Parallel, delayed
 
 from datetime import datetime
 from tslearn.metrics import dtw
-from numpy import array, zeros, savetxt
+from numpy import array, zeros, savetxt, datetime64
 
 if __name__ == "__main__":
     wavelet = "cmor1.5-1.5"
@@ -23,7 +23,7 @@ if __name__ == "__main__":
     prn_subseries = tuple([int(file_lines[n-2]) for n in range(3, 3*total_series + 1, 3)])
     with tqdm_joblib(tqdm(total= total_series)) as progress_bar:
         dtec_subseries = Parallel(n_jobs=-1)(delayed(extract_prominent_series)(n,
-                                    array([datetime.fromisoformat(x.strip()) for x in file_lines[n-1].split(",")]),
+                                    array([datetime.fromisoformat(x.strip()) for x in file_lines[n-1].split(",")], dtype = datetime64),
                                     array(file_lines[n].split(","), dtype=float),
                                     wavelet, dj) for n in range(3, 3*total_series + 1, 3))
 
@@ -40,7 +40,7 @@ if __name__ == "__main__":
             PTEX_sub_out.write(", ".join(list(map(lambda x: str(x), time_subseries[n]))) + "\n")
             PTEX_sub_out.write(", ".join(list(map(lambda x: str(x), dtec_subseries[n]))) + "\n")
 
-    print(f"\n--Computing DTW between every pair of prominent series--")
+    print(f"--Computing DTW between every pair of prominent series--")
     def compute_dist(index_1, index_2, seq_1, seq_2):
         return index_1, index_2, dtw(seq_1, seq_2)
     with tqdm_joblib(tqdm(total=total_series * (total_series - 1) // 2)) as progress_bar:
