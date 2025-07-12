@@ -1,7 +1,7 @@
 import numpy as np
 from scipy.stats import gaussian_kde
 from sklearn.metrics import euclidean_distances
-from matplotlib.pyplot import subplots
+from matplotlib.pyplot import subplots, figure
 
 from sklearn.manifold import MDS
 
@@ -95,7 +95,7 @@ class TimeSeriesMDS:
         # Compute Stress-1
         return np.sqrt(num / denom)
 
-    def fit(self, num_comps=2, method="Classic", max_iter=500, eps=1e-6, verbose=0, visualize_shepard=True):
+    def fit(self, num_comps=2, method="Classic", max_iter=500, eps=1e-6, verbose=0, visualize_shepard=True) -> np.ndarray:
         """
         Fit the MDS model using the specified method and parameters.
 
@@ -176,7 +176,9 @@ class TimeSeriesMDS:
 
     def VisualizeVectors(self, Colors=None, Centroids=None):
         """
-        Visualize the reduced vectors in pairwise scatter plots and diagonal density plots.
+        Visualize the reduced vectors with different layouts for 2D and higher dimensions.
+        For 2D, creates a scatter plot with marginal histograms.
+        For higher dimensions, creates pairwise scatter plots with diagonal density plots.
 
         Parameters:
         - Colors: Optional array of colors for the scatter plots.
@@ -184,28 +186,84 @@ class TimeSeriesMDS:
         """
         num_dims = self.Xc.shape[1]
 
-        Figure, Subplots = subplots(nrows=num_dims, ncols=num_dims, sharex="col", figsize=(10, 10))
-        for n in range(num_dims):
-            kde_gaussian = gaussian_kde(self.Xc[:, n].flatten(), bw_method="scott").evaluate(self.Xc[:, n])
-            ordered_X_n, KDE = zip(*sorted([(x, kde_x) for x, kde_x in zip(self.Xc[:, n].flatten(), kde_gaussian)], key=lambda e: e[0]))
+        if num_dims == 2:
+            # Create figure with custom layout for 2D visualization
+            Figure = figure(figsize=(10, 10))
 
-            Subplots[n, n].plot(ordered_X_n, KDE, "-k")
-            Subplots[n, n].fill_between(ordered_X_n, KDE, alpha=0.25, color="black")
-            Subplots[n, n].set_ylim(bottom=0.0)
+            # Create a gridspec layout
+            gs = Figure.add_gridspec(3, 3)
 
-            for m in range(num_dims):
-                if n != m:
-                    Subplots[n, m].axvline(linestyle="-", color="black", alpha=0.5, zorder=0)
-                    Subplots[n, m].axhline(linestyle="-", color="black", alpha=0.5, zorder=0)
-                    if Colors is not None:
-                        Subplots[n, m].scatter(self.Xc[:, m], self.Xc[:, n], c=Colors, ec="black", s=12)
-                    else:
-                        Subplots[n, m].scatter(self.Xc[:, m], self.Xc[:, n], marker="o", fc="black", ec="black", s=12)
+            # Create the scatter plot in the main area
+            ax_scatter = Figure.add_subplot(gs[1:, :-1])
+            ax_hist_x = Figure.add_subplot(gs[0, :-1], sharex=ax_scatter)
+            ax_hist_y = Figure.add_subplot(gs[1:, -1], sharey=ax_scatter)
 
-                    # Plot centroids if provided
-                    if Centroids is not None:
-                        Subplots[n, m].scatter(Centroids[:, m], Centroids[:, n], marker="X", c="red", s=50, label="Centroids")
-                        Subplots[n, m].legend(loc="upper right")
+            # Plot the scatter plot
+            if Colors is not None:
+                scatter = ax_scatter.scatter(self.Xc[:, 0], self.Xc[:, 1], 
+                                          c=Colors, ec="black", s=50)
+            else:
+                scatter = ax_scatter.scatter(self.Xc[:, 0], self.Xc[:, 1], 
+                                          c="black", ec="black", s=50)
 
-            Subplots[num_dims - 1, n].set_xlabel(f"Coordinate {n + 1}")
+            # Plot centroids if provided
+            if Centroids is not None:
+                ax_scatter.scatter(Centroids[:, 0], Centroids[:, 1], 
+                                 marker="X", c="red", s=100, label="Centroids")
+                ax_scatter.legend(loc="upper right")
+
+            # Add grid lines
+            ax_scatter.grid(True, alpha=0.3)
+            ax_scatter.set_xlabel("Coordinate 1")
+            ax_scatter.set_ylabel("Coordinate 2")
+
+            # Plot histograms
+            ax_hist_x.hist(self.Xc[:, 0], bins=30, edgecolor='black', 
+                          color='gray', alpha=0.5)
+            ax_hist_y.hist(self.Xc[:, 1], bins=30, orientation='horizontal',
+                          edgecolor='black', color='gray', alpha=0.5)
+
+            # Remove labels from histograms
+            ax_hist_x.tick_params(labelbottom=False)
+            ax_hist_y.tick_params(labelleft=False)
+
+            # Remove top and right spines from histograms
+            ax_hist_x.spines['top'].set_visible(False)
+            ax_hist_x.spines['right'].set_visible(False)
+            ax_hist_y.spines['top'].set_visible(False)
+            ax_hist_y.spines['right'].set_visible(False)
+
+        else:
+            # Original visualization for higher dimensions
+            Figure, Subplots = subplots(nrows=num_dims, ncols=num_dims, 
+                                       sharex="col", figsize=(10, 10))
+            for n in range(num_dims):
+                kde_gaussian = gaussian_kde(self.Xc[:, n].flatten(), 
+                                         bw_method="scott").evaluate(self.Xc[:, n])
+                ordered_X_n, KDE = zip(*sorted([(x, kde_x) 
+                                    for x, kde_x in zip(self.Xc[:, n].flatten(), kde_gaussian)], 
+                                    key=lambda e: e[0]))
+
+                Subplots[n, n].plot(ordered_X_n, KDE, "-k")
+                Subplots[n, n].fill_between(ordered_X_n, KDE, alpha=0.25, color="black")
+                Subplots[n, n].set_ylim(bottom=0.0)
+
+                for m in range(num_dims):
+                    if n != m:
+                        Subplots[n, m].axvline(linestyle="-", color="black", alpha=0.5, zorder=0)
+                        Subplots[n, m].axhline(linestyle="-", color="black", alpha=0.5, zorder=0)
+                        if Colors is not None:
+                            Subplots[n, m].scatter(self.Xc[:, m], self.Xc[:, n], 
+                                                 c=Colors, ec="black", s=12)
+                        else:
+                            Subplots[n, m].scatter(self.Xc[:, m], self.Xc[:, n], 
+                                                 marker="o", fc="black", ec="black", s=12)
+
+                        if Centroids is not None:
+                            Subplots[n, m].scatter(Centroids[:, m], Centroids[:, n], 
+                                                 marker="X", c="red", s=50, label="Centroids")
+                            Subplots[n, m].legend(loc="upper right")
+
+                Subplots[num_dims - 1, n].set_xlabel(f"Coordinate {n + 1}")
+
         Figure.tight_layout()
