@@ -44,7 +44,7 @@ class ClusterMDS:
         - cluster_method: Clustering method ("K-Means" or "GaussMix").
         """
         # Cluster the time series vectors obtained from MDS
-        if num_clusters >= 2 and cluster_method in ["K-Means", "Gaussian"]:
+        if num_clusters >= 2 and cluster_method in ["K-Means", "GaussMix"]:
             # Apply K-Means clustering if no labels are provided
             if cluster_method == "K-Means":
                 KMeans_Cluster_TS = KMeans(n_clusters = num_clusters, init = "k-means++")
