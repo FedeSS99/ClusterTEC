@@ -3,7 +3,8 @@ from scipy.stats import gaussian_kde
 from sklearn.metrics import euclidean_distances
 from matplotlib.pyplot import subplots, figure
 
-from sklearn.manifold import MDS
+#from sklearn.manifold import MDS
+from mdscuda import MDS
 
 class TimeSeriesMDS:
     """
@@ -22,6 +23,7 @@ class TimeSeriesMDS:
 
         self.N = self.__dissim.shape[0]
         self.__H = np.eye(N = self.N) - (1/self.N)*np.full((self.N, self.N), 1.0)
+        self.normalized_stress = np.float32(0.0)
 
     def __compute_euclidean_B(self):
         """
@@ -118,16 +120,23 @@ class TimeSeriesMDS:
 
         def compute_smacof_embedding(dissimilarity_matrix, init_conf=None):
             """Compute the SMACOF MDS embedding."""
+            #mds = MDS(
+            #    n_components=num_comps,
+            #    n_jobs=-1,
+            #    dissimilarity="precomputed",
+            #    max_iter=max_iter,
+            #    eps=eps,
+            #    verbose=verbose,
+            #    n_init=1 if init_conf is not None else 4,
+            #)
             mds = MDS(
-                n_components=num_comps,
-                n_jobs=-1,
-                dissimilarity="precomputed",
-                max_iter=max_iter,
-                eps=eps,
-                verbose=verbose,
-                n_init=1 if init_conf is not None else 4,
+                n_dims = num_comps,
+                max_iter = max_iter,
+                verbosity = verbose,
+                x_init = init_conf,
+                n_init = 1 if init_conf is not None else 4
             )
-            return mds.fit(dissimilarity_matrix, init=init_conf).embedding_
+            return mds.fit(delta = dissimilarity_matrix, sqform=True, calc_r2=False)
 
         def process_method(dissimilarity_matrix, use_euclidean=False, use_smacof=False, use_classic_init=False):
             """Process the specified method and compute the embedding."""
@@ -174,7 +183,7 @@ class TimeSeriesMDS:
         print(f"{method} with {num_comps} components has a stress-1 value of {self.normalized_stress:.6f}")
         return self.Xc
 
-    def VisualizeVectors(self, Colors=None, Centroids=None):
+    def VisualizeVectors(self, Colors=None):
         """
         Visualize the reduced vectors with different layouts for 2D and higher dimensions.
         For 2D, creates a scatter plot with marginal histograms.
@@ -182,12 +191,11 @@ class TimeSeriesMDS:
 
         Parameters:
         - Colors: Optional array of colors for the scatter plots.
-        - Centroids: Optional array of centroids to visualize.
         """
         num_dims = self.Xc.shape[1]
 
         if num_dims == 2:
-            # Create figure with custom layout for 2D visualization
+            # Visualization for only two dimensions
             Figure = figure(figsize=(10, 10))
 
             # Create a gridspec layout
@@ -201,16 +209,10 @@ class TimeSeriesMDS:
             # Plot the scatter plot
             if Colors is not None:
                 scatter = ax_scatter.scatter(self.Xc[:, 0], self.Xc[:, 1], 
-                                          c=Colors, ec="black", s=50)
+                                          c=Colors, ec="black", s=24)
             else:
                 scatter = ax_scatter.scatter(self.Xc[:, 0], self.Xc[:, 1], 
-                                          c="black", ec="black", s=50)
-
-            # Plot centroids if provided
-            if Centroids is not None:
-                ax_scatter.scatter(Centroids[:, 0], Centroids[:, 1], 
-                                 marker="X", c="red", s=100, label="Centroids")
-                ax_scatter.legend(loc="upper right")
+                                          c="black", ec="black", s=24)
 
             # Add grid lines
             ax_scatter.grid(True, alpha=0.3)
@@ -218,9 +220,9 @@ class TimeSeriesMDS:
             ax_scatter.set_ylabel("Coordinate 2")
 
             # Plot histograms
-            ax_hist_x.hist(self.Xc[:, 0], bins=30, edgecolor='black', 
+            ax_hist_x.hist(self.Xc[:, 0], bins="auto", edgecolor='black', 
                           color='gray', alpha=0.5)
-            ax_hist_y.hist(self.Xc[:, 1], bins=30, orientation='horizontal',
+            ax_hist_y.hist(self.Xc[:, 1], bins="auto", orientation='horizontal',
                           edgecolor='black', color='gray', alpha=0.5)
 
             # Remove labels from histograms
@@ -234,18 +236,11 @@ class TimeSeriesMDS:
             ax_hist_y.spines['right'].set_visible(False)
 
         else:
-            # Original visualization for higher dimensions
+            # Visualization for higher dimensions
             Figure, Subplots = subplots(nrows=num_dims, ncols=num_dims, 
                                        sharex="col", figsize=(10, 10))
             for n in range(num_dims):
-                kde_gaussian = gaussian_kde(self.Xc[:, n].flatten(), 
-                                         bw_method="scott").evaluate(self.Xc[:, n])
-                ordered_X_n, KDE = zip(*sorted([(x, kde_x) 
-                                    for x, kde_x in zip(self.Xc[:, n].flatten(), kde_gaussian)], 
-                                    key=lambda e: e[0]))
-
-                Subplots[n, n].plot(ordered_X_n, KDE, "-k")
-                Subplots[n, n].fill_between(ordered_X_n, KDE, alpha=0.25, color="black")
+                Subplots[n, n].hist(self.Xc[:, n], bins="auto", edgecolor='black', color='gray', alpha=0.5)
                 Subplots[n, n].set_ylim(bottom=0.0)
 
                 for m in range(num_dims):
@@ -254,15 +249,10 @@ class TimeSeriesMDS:
                         Subplots[n, m].axhline(linestyle="-", color="black", alpha=0.5, zorder=0)
                         if Colors is not None:
                             Subplots[n, m].scatter(self.Xc[:, m], self.Xc[:, n], 
-                                                 c=Colors, ec="black", s=12)
+                                                 c=Colors, ec="black", s=24)
                         else:
                             Subplots[n, m].scatter(self.Xc[:, m], self.Xc[:, n], 
-                                                 marker="o", fc="black", ec="black", s=12)
-
-                        if Centroids is not None:
-                            Subplots[n, m].scatter(Centroids[:, m], Centroids[:, n], 
-                                                 marker="X", c="red", s=50, label="Centroids")
-                            Subplots[n, m].legend(loc="upper right")
+                                                 marker="o", fc="black", ec="black", s=24)
 
                 Subplots[num_dims - 1, n].set_xlabel(f"Coordinate {n + 1}")
 
