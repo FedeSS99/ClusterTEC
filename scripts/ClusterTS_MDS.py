@@ -35,7 +35,7 @@ class ClusterMDS:
         # Return the normalized stress value as a measure of MDS quality
         return self.__MDS_TScluster.normalized_stress
 
-    def ClusterTSVectors(self, num_clusters=2, cluster_method="K-Means") -> None:
+    def ClusterTSVectors(self, num_clusters=2, cluster_method = "K-Means", max_iter : int = 1000) -> dict[str, float]:
         """
         Cluster the time series vectors obtained from MDS.
 
@@ -47,30 +47,23 @@ class ClusterMDS:
         if num_clusters >= 2 and cluster_method in ["K-Means", "GaussMix"]:
             # Apply K-Means clustering if no labels are provided
             if cluster_method == "K-Means":
-                KMeans_Cluster_TS = KMeans(n_clusters = num_clusters, init = "k-means++")
+                KMeans_Cluster_TS = KMeans(n_clusters = num_clusters, init = "k-means++", max_iter = max_iter)
                 self.Xc_Labels = KMeans_Cluster_TS.fit_predict(self.Xc_TS)
                 # Store cluster centers
                 self.centers = KMeans_Cluster_TS.cluster_centers_
             
             # Apply Gaussian Mixture clustering if specified
             elif cluster_method == "GaussMix":
-                GaussianMix_Cluster_TS = GaussianMixture(n_components = num_clusters, covariance_type = "full")
+                GaussianMix_Cluster_TS = GaussianMixture(n_components = num_clusters, covariance_type = "full", max_iter = max_iter)
                 self.Xc_Labels = GaussianMix_Cluster_TS.fit_predict(self.Xc_TS)
                 
                 # Store cluster means as centers
                 self.centers = GaussianMix_Cluster_TS.means_
 
             # Calculate clustering evaluation scores
-            silhouette_score_cluster = silhouette_score(self.Xc_TS, self.Xc_Labels)
-            CH_score_kmeans_cluster = calinski_harabasz_score(self.Xc_TS, self.Xc_Labels)
-            DB_score_kmeans_cluster = davies_bouldin_score(self.Xc_TS, self.Xc_Labels)
-            print(f"--Scores with {cluster_method} clustering--\nSH coefficient = {silhouette_score_cluster}\nCH index = {CH_score_kmeans_cluster}\nDB index = {DB_score_kmeans_cluster}")
-
-            # Calculate and print the total number of series in each cluster
-            TotalSeriesPerCluster = dict(Counter(self.Xc_Labels))
-            print("--Total series for every cluster--")
-            for key_cluster in sorted(list(TotalSeriesPerCluster.keys())):
-                print(f"{key_cluster} -> {TotalSeriesPerCluster[key_cluster]}")
+            silhouette_score_cluster = float(silhouette_score(self.Xc_TS, self.Xc_Labels))
+            CH_score_cluster = float(calinski_harabasz_score(self.Xc_TS, self.Xc_Labels))
+            DB_score_cluster = float(davies_bouldin_score(self.Xc_TS, self.Xc_Labels))
 
             # Compute distances to centroids and sort each cluster
             self.cluster_order = {}  # Dictionary to store ordered indices per cluster
@@ -79,6 +72,8 @@ class ClusterMDS:
                 distances = np.linalg.norm(self.Xc_TS[indices_in_cluster] - self.centers[cluster], axis=1)
                 sorted_indices = indices_in_cluster[np.argsort(distances)]  # Sort indices by distance
                 self.cluster_order[cluster] = sorted_indices  # Store the ordered indices
+
+            return {"SH_score": silhouette_score_cluster, "CH_score": CH_score_cluster, "DB_score": DB_score_cluster}
 
         else:
             # If labels are provided, no clustering is performed
@@ -101,4 +96,4 @@ class ClusterMDS:
             self.__ColorLabels = colormaps["brg"](Normalize(vmin = self.Xc_Labels.min(), vmax = self.Xc_Labels.max())(self.Xc_Labels))
         
         # Pass centroids to the visualization method
-        self.__MDS_TScluster.VisualizeVectors(Colors = self.__ColorLabels, Centroids = self.centers if hasattr(self, 'centers') else None)
+        self.__MDS_TScluster.VisualizeVectors(Colors = self.__ColorLabels)
