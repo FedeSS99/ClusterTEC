@@ -93,6 +93,7 @@ class SYNCLUS:
         clus_itera[0, :] = start_clusters  # First clusters
     
         t = 1
+        zero_cluster_count = 0  # Counter for empty clusters
         while t <= self.iter:
             Js = np.bincount(new_clusters)[1:]  # Number of elements in each cluster (ignore cluster 0)
 
@@ -108,6 +109,11 @@ class SYNCLUS:
 
                 for k in range(self.K):
                     Jk = Js[k]  # Number of elements in cluster k
+                    if Jk == 0:
+                        # Avoid division by zero: set data[:, k] to np.inf and skip calculations for this cluster
+                        data[:, k] = np.inf
+                        zero_cluster_count += 1
+                        continue
                     Dk2 = (1 / (2 * (Jk ** 2))) * np.sum(self.D2[np.ix_(new_clusters == (k + 1), new_clusters == (k + 1))])  # D^2_k
                     data[:, k] = (1 / Jk) * np.sum(self.D2[:, new_clusters == (k + 1)] - Dk2, axis=1)  # D^2_{jk}
                     ep_aux = (1 / (2 * Jk)) * np.sum(self.D2[np.ix_(new_clusters == (k + 1), new_clusters == (k + 1))])  # EP
@@ -124,6 +130,9 @@ class SYNCLUS:
     
         end_clusters = clus_itera[np.argmin(EP), :]  # Final clusters
         EP = EP[1:]  # Remove the first max value
+
+        if zero_cluster_count > 0:
+            print(f"[SYNCLUS] The 'Jk == 0' condition (empty cluster) was encountered {zero_cluster_count} times during clustering.")
 
         return {
             'start_clusters': start_clusters,
@@ -176,11 +185,7 @@ class SYNCLUS:
             self.KMS[index] = KMeans_results
 
         min_EPS_index = np.argmin(self.EPS)
-        min_quartiles_max = np.round(mquantiles(self.EPS, prob = [0.0, 0.25, 0.5, 0.75, 1.0]), decimals = 2).tolist()
-
-        print("Best SYNCLUS at ", min_EPS_index, "with ", self.K, " clusters")
-        print("Min, Quartiles, Max")
-        print(", ".join(tuple(map(lambda x: str(x), min_quartiles_max))))
-        
+        print(f"Best SYNCLUS model at index {min_EPS_index} with EP = {self.EPS[min_EPS_index]:.6f}  for {self.K} clusters")
+ 
         KMeansByMinEPS = self.KMS[min_EPS_index]
         return KMeansByMinEPS
