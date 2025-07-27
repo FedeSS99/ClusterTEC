@@ -1,5 +1,5 @@
 from os import listdir
-from os.path import join
+from os.path import join, isdir
 from tqdm import tqdm
 
 from joblib import Parallel, delayed
