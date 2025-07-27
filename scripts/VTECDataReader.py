@@ -175,9 +175,10 @@ class VTECDataReader:
         self.__list_cmn_files :list[str] = []
         for dir in self.__dirs:
             for month in listdir(dir):
-                current_month_dir :str = join(dir, month)
-                for cmn_filename in listdir(current_month_dir):
-                    self.__list_cmn_files.append(join(current_month_dir, cmn_filename))
+                current_month_dir : str = join(dir, month)
+                if isdir(current_month_dir):
+                    for cmn_filename in listdir(current_month_dir):
+                        self.__list_cmn_files.append(join(current_month_dir, cmn_filename))
 
         self.satellite_data = []
         print("--Reading Cmn files--")
