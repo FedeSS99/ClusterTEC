@@ -8,7 +8,7 @@ if __name__ == "__main__":
 
     PTEX_VTEC.read_and_extract_vtec_data()
 
-    with open("./data/PTEX_dtec_series.dat", "+w") as PTEXout:
+    with open("../data/PTEX_dtec_series.dat", "w") as PTEXout:
         N = len(PTEX_VTEC.dtec_sequences)
 
         PTEXout.write(f"{N}\n")

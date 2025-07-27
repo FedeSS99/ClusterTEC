@@ -32,7 +32,7 @@ if __name__ == "__main__":
     total_series = len(dtec_subseries)
     print(f"Total of series: {total_series}")
     print("-- Saving dTEC subseries --")
-    with open("./data/PTEX_dtec_subseries.dat", "+w") as PTEX_sub_out:
+    with open("../data/PTEX_dtec_subseries.dat", "+w") as PTEX_sub_out:
         PTEX_sub_out.write(f"{total_series}\n")
         for n in tqdm(range(total_series)):
             PTEX_sub_out.write(f"{prn_subseries[n]}\n")
@@ -51,4 +51,4 @@ if __name__ == "__main__":
         dissimilarity_matrix[i, j] = dist
         dissimilarity_matrix[j, i] = dist
 
-    savetxt(f"./data/PTEX_DTW_matrix.dat", dissimilarity_matrix, delimiter=",")
+    savetxt(f"../data/PTEX_DTW_matrix.dat", dissimilarity_matrix, delimiter=",")
